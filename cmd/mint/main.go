@@ -20,6 +20,7 @@ import (
 )
 
 const EachAccountMaxMintNumber = 10 // 每个账户最多mint10笔同一种资产，这里不做链上历史索引。
+var multiplier = big.NewInt(120)
 
 var ZeroAddress = common.HexToAddress("0x0000000000000000000000000000000000000000")
 var globalEthClient *ethclient.Client
@@ -32,7 +33,7 @@ var eachAccountMintedNumber = make(map[string]int)
 
 var mixPayloadNonce = 200
 
-var accountMutex = sync.Mutex{}
+var accountMutex sync.RWMutex
 var payloadInnerMutex = sync.Mutex{}
 
 var mnemonic string
@@ -82,6 +83,8 @@ func main() {
 		log.Fatalln("Error getting gas price: ", err)
 	}
 	globalTxGasPrice = gasPrice
+	globalTxGasPrice = globalTxGasPrice.Mul(globalTxGasPrice, multiplier).Div(globalTxGasPrice, big.NewInt(100))
+
 	log.Println("Start mint account nonce: ", globalTxNonce, " Gas price: ", globalTxGasPrice)
 
 	for i := 0; i < runtime.NumCPU(); i++ {
@@ -91,11 +94,11 @@ func main() {
 				payloadNonce := genPayloadNonce()
 				payload := fmt.Sprintf(`data:application/json,{"p":"ierc-20","op":"mint","tick":"%s","amt":"%s","nonce":"%s"}`, *tickString, *amountString, payloadNonce)
 
-				accountMutex.Lock()
+				accountMutex.RLock()
 				txNonce := globalTxNonce
 				privateKey := globalCurrentAccountPrivateKey
 				txGasPrice := globalTxGasPrice
-				accountMutex.Unlock()
+				accountMutex.RUnlock()
 
 				tx := types.NewTx(&types.LegacyTx{
 					Nonce:    txNonce,
@@ -161,7 +164,7 @@ func main() {
 							log.Fatalln("Error sending tx: ", err)
 						}
 						// 必须等待交易确认，该协议要求，同一个区块中+同一个账户+同一个资产的mint交易，只会有一笔生效。
-						ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+						ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 						for {
 							_, isPending, err := globalEthClient.TransactionByHash(context.Background(), txHash)
 							if err != nil {
@@ -189,6 +192,9 @@ func main() {
 						if err != nil {
 							log.Fatalln("Error getting gas price: ", err)
 						}
+						// 120% gas price
+						globalTxGasPrice = globalTxGasPrice.Mul(globalTxGasPrice, multiplier).Div(globalTxGasPrice, big.NewInt(100))
+
 						accountMutex.Unlock()
 					}
 					// 重置payload inner nonce
