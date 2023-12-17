@@ -19,8 +19,8 @@ import (
 	"time"
 )
 
-const EachAccountMaxMintNumber = 10 // 每个账户最多mint10笔同一种资产，这里不做链上历史索引。
-var multiplier = big.NewInt(120)
+const EachAccountMaxMintNumber = 21000 // 每个账户最多N笔同一种资产，这里不做链上历史索引。
+var multiplier = big.NewInt(110)       // 1.1
 
 var ZeroAddress = common.HexToAddress("0x0000000000000000000000000000000000000000")
 var globalEthClient *ethclient.Client
